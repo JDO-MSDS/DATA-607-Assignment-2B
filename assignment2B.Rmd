@@ -1,0 +1,98 @@
+---
+title: "Assignment 2B Classification Performance Metrics"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(readr)
+```
+
+```{r}
+# load
+url <- "https://raw.githubusercontent.com/acatlin/data/master/penguin_predictions.csv"
+dat <- read_csv(url, show_col_types = FALSE)
+
+dat <- dat %>%
+  mutate(
+    actual = ifelse(sex == "female", 1L, 0L)
+  )
+
+head(dat)
+```
+
+```{r}
+# Majority class proportion = max(p(female), p(male))
+class_counts <- dat %>% count(sex, name = "n")
+class_counts
+
+N <- nrow(dat)
+majority_prop <- max(class_counts$n) / N
+null_error_rate <- 1 - majority_prop
+
+cat(sprintf("Majority class proportion: %.3f\n", majority_prop))
+cat(sprintf("Null error rate (always predict majority): %.3f\n", null_error_rate))
+```
+
+```{r}
+ggplot(dat, aes(x = sex)) +
+  geom_bar() +
+  labs(title = "Distribution of Actual Class (sex)",
+       x = "Actual (sex)", y = "Count")
+```
+
+```{r}
+# Build predictions 
+make_pred <- function(p, thr) ifelse(p >= thr, 1L, 0L)
+
+# Compute 
+conf_counts <- function(actual, prob, thr) {
+  pred <- make_pred(prob, thr)
+  TP <- sum(pred == 1 & actual == 1)
+  FP <- sum(pred == 1 & actual == 0)
+  TN <- sum(pred == 0 & actual == 0)
+  FN <- sum(pred == 0 & actual == 1)
+  data.frame(Threshold = thr, TP, FP, TN, FN)
+}
+
+thrs <- c(0.2, 0.5, 0.8)
+conf_list <- lapply(thrs, function(t) conf_counts(dat$actual, dat$.pred_female, t))
+conf_df <- bind_rows(conf_list)
+conf_df
+
+```
+
+```{r}
+# Show each confusion matrix in compact form (Actual rows, Predicted cols)
+print_conf_matrix <- function(actual, prob, thr) {
+  pred <- make_pred(prob, thr)
+  mat <- table(Actual = factor(actual, levels = c(1,0), labels = c("Female(1)","NotFemale(0)")),
+               Pred   = factor(pred,   levels = c(1,0), labels = c("Pred=1","Pred=0")))
+  cat("\n--- Confusion Matrix at threshold =", thr, "---\n")
+  print(mat)
+}
+
+invisible(lapply(thrs, function(t) print_conf_matrix(dat$actual, dat$.pred_female, t)))
+```
+
+```{r}
+# Metric helpers (guard against divide-by-zero)
+safe_div <- function(a, b) ifelse(b == 0, NA_real_, a / b)
+
+add_metrics <- function(df) {
+  df %>%
+    mutate(
+      N = TP + FP + TN + FN,
+      accuracy  = safe_div(TP + TN, N),
+      precision = safe_div(TP, TP + FP),
+      recall    = safe_div(TP, TP + FN),
+      f1        = safe_div(2 * precision * recall, precision + recall)
+    )
+}
+
+metrics_df <- add_metrics(conf_df) %>%
+  select(Threshold, TP, FP, TN, FN, accuracy, precision, recall, f1)
+
+metrics_df
+```

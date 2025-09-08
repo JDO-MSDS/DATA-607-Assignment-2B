@@ -8,6 +8,7 @@ library(dplyr)
 library(ggplot2)
 library(readr)
 ```
+## Overview: This  report evaluates a binary classifier that predicts penguin sex using the provided predictions csv file
 
 ```{r}
 # load
@@ -96,3 +97,4 @@ metrics_df <- add_metrics(conf_df) %>%
 
 metrics_df
 ```
+
